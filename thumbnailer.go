@@ -24,8 +24,8 @@ import (
 
 //=============================================================================
 
-var inputDir     = flag.String("i", "images", "input directory")
-var outputDir    = flag.String("o", "thumbs", "output directory")
+var inputDir     = flag.String("i", "image_packs", "input directory")
+var outputDir    = flag.String("o", "image_thumbs", "output directory")
 var deduplicate  = flag.Bool("d", true, "skip duplicates")
 var shufflePaths = flag.Bool("s", true, "shuffle image paths")
 var flipVertical = flag.Bool("f", true, "flip vertical")
