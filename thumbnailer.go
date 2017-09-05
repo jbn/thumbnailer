@@ -34,6 +34,8 @@ var flipOps      = []bool{false}
 
 //=============================================================================
 
+var wg sync.WaitGroup
+
 var RECEPTOR_FIELD = []int{224, 224}
 
 var ANCHORINGS = map[string]gift.Anchor{
@@ -133,7 +135,7 @@ func saveThumb(filepath string, img image.Image) {
 // not feasible for some datasets.
 
 var PROCESSORS = runtime.NumCPU() * 2
-var inputFiles = make(chan string, PROCESSORS)
+var fileChan = make(chan string, 4*PROCESSORS)
 
 
 func validFile(path string, info os.FileInfo) bool {
@@ -144,7 +146,7 @@ func validFile(path string, info os.FileInfo) bool {
 }
 
 func gatherInputs(inputPath string) {
-    defer close(inputFiles)
+    defer close(fileChan )
 
     if *shufflePaths {
         var paths []string
@@ -159,14 +161,14 @@ func gatherInputs(inputPath string) {
 
         permutation := rand.Perm(len(paths))
         for _, i := range permutation{
-            inputFiles <- paths[i]
+            fileChan <- paths[i]
         }
 
     } else {
         // Write to the channel ASAP.
         filepath.Walk(inputPath, func (path string, info os.FileInfo, err error) error {
             if err == nil && validFile(path, info) {
-                inputFiles <- path
+                fileChan <- path
             }
             return err
         })
@@ -189,13 +191,31 @@ func outputPath(inputPath string, ensureDir bool) string {
     return filepath.Join(dstDir, srcName)
 }
 
+var checksumMutex sync.Mutex
+
+var checksums = make(map[int64]bool)
+
+func checkChecksum(checksum int64) bool {
+    checksumMutex.Lock()
+    defer checksumMutex.Unlock()
+
+    if _, found := checksums[checksum]; found {
+        return false
+    }
+    checksums[checksum] = true
+    return true
+}
+
+
 func processPath(inputFile string) {
 
     fmt.Println(inputFile)
 
     img, checksum, err := readImage(inputFile)
-    if checksum == 0 {
-        fmt.Println("WTF")
+
+    if *deduplicate && !checkChecksum(checksum) {
+        fmt.Println("Skipping", inputFile)
+        return
     }
 
     if err != nil{
@@ -212,28 +232,21 @@ func processPath(inputFile string) {
         fmt.Println("Saving", f_p)
         saveThumb(f_p, v)
     }
+
 }
 
-var wg sync.WaitGroup
-
 func consumer() {
-    defer wg.Done()
-
-    for inputFile := range inputFiles {
+    for inputFile := range fileChan {
         processPath(inputFile)
     }
+    defer wg.Done()
 }
 
 func receiveInputs() {
-
     for i := 0; i < PROCESSORS; i++ {
         wg.Add(1)
         go consumer()
     }
-
-    fmt.Println("done")
-    wg.Wait()
-    fmt.Println("Done")
 }
 
 //=============================================================================
@@ -248,4 +261,7 @@ func main() {
 
     gatherInputs(*inputDir)
     receiveInputs()
+
+    wg.Wait()
+    fmt.Println("Done")
 }
