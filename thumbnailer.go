@@ -30,6 +30,7 @@ var outputDir    = flag.String("o", "image_thumbs", "output directory")
 var deduplicate  = flag.Bool("n", true, "skip duplicates")
 var shufflePaths = flag.Bool("s", true, "shuffle image paths")
 var flipVertical = flag.Bool("f", true, "flip vertical")
+var verbose      = flag.Bool("v", true, "verbose output")
 
 // This isn't a flag. But, it's populated based on flipVertical.
 var flipOps      = []bool{false}
@@ -261,13 +262,16 @@ func checkChecksum(checksum int64) bool {
 
 
 func processPath(inputFile string) {
-
-    fmt.Println(inputFile)
+    if *verbose {
+        fmt.Println(inputFile)
+    }
 
     img, checksum, err := readImage(inputFile)
 
     if *deduplicate && false && !checkChecksum(checksum) {
-        fmt.Println("Skipping", inputFile)
+        if *verbose {
+            fmt.Println("Skipping", inputFile)
+        }
         return
     }
 
@@ -288,7 +292,9 @@ func processPath(inputFile string) {
     }
     for k, v := range thumbs {
         f_p := filepath.Join(d, name + "_" + k + ".png")
-        fmt.Println("Saving", f_p)
+        if *verbose {
+            fmt.Println("Saving", f_p)
+        }
         saveThumb(f_p, v)
     }
 
