@@ -5,6 +5,7 @@ import (
     "errors"
     "flag"
     "fmt"
+    "gopkg.in/cheggaaa/pb.v1"
     "github.com/disintegration/gift"
     "hash/crc32"
     "image"
@@ -124,6 +125,8 @@ func subImage(src image.Image) image.Image {
 }
 
 
+var progressBar *pb.ProgressBar = nil
+
 func createThumbs(src image.Image, anchors map[string]gift.Anchor) map[string]image.Image {
     thumbs := make(map[string]image.Image)
 
@@ -172,8 +175,6 @@ var nProcessors = runtime.NumCPU() * 2
 
 var filePaths = make(chan string, 4*nProcessors)
 
-var totalPaths = -1
-
 func isImageFile(path string, info os.FileInfo) bool {
     baseName := filepath.Base(path)
     return (baseName[0] != '.' && // No hidden files
@@ -194,8 +195,6 @@ func produceInputs(inputPath string) {
             return err
         })
 
-        totalPaths = len(paths)
-
         // Walk paths shuffled.
         // Why? If you visit sequentially and use deplification, 
         // files that are lexicographically earlier are less likely 
@@ -209,6 +208,10 @@ func produceInputs(inputPath string) {
                 filePaths <- paths[i]
             }
         }()
+
+        if !*verbose {
+            progressBar = pb.StartNew(len(paths))
+        }
 
     } else {
         wg.Add(1)
@@ -264,8 +267,7 @@ func checkChecksum(checksum int64) bool {
 func processPath(inputFile string) {
     if *verbose {
         fmt.Println(inputFile)
-    }
-
+    } 
     img, checksum, err := readImage(inputFile)
 
     if *deduplicate && false && !checkChecksum(checksum) {
@@ -297,13 +299,16 @@ func processPath(inputFile string) {
         }
         saveThumb(f_p, v)
     }
-
 }
 
 func consumer() {
     defer wg.Done()
     for inputFile := range filePaths {
         processPath(inputFile)
+
+        if (*shufflePaths && !*verbose) {
+            progressBar.Increment()
+        }
     }
 }
 
