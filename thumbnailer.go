@@ -31,7 +31,7 @@ var outputDir    = flag.String("o", "image_thumbs", "output directory")
 var deduplicate  = flag.Bool("n", true, "skip duplicates")
 var shufflePaths = flag.Bool("s", true, "shuffle image paths")
 var flipVertical = flag.Bool("f", true, "flip vertical")
-var verbose      = flag.Bool("v", true, "verbose output")
+var verbose      = flag.Bool("v", false, "verbose output")
 
 // This isn't a flag. But, it's populated based on flipVertical.
 var flipOps      = []bool{false}
@@ -246,31 +246,35 @@ func outputPath(inputPath string, ensureDir bool) (string, error) {
     return filepath.Join(dstDir, srcName), nil
 }
 
+
+var dupesSkipped = 0
+
 var checksumMutex sync.Mutex
 
 var checksums = make(map[int64]bool)
 
-func checkChecksum(checksum int64) bool {
+func isDupe(checksum int64) bool {
     // This should be better than a RWLock for most cases.
     // Usually, you have only a few dupes.
     checksumMutex.Lock()
     defer checksumMutex.Unlock()
 
     if _, found := checksums[checksum]; found {
-        return false
+        dupesSkipped += 1
+        return true
     }
     checksums[checksum] = true
-    return true
+    return false
 }
 
 
 func processPath(inputFile string) {
     if *verbose {
         fmt.Println(inputFile)
-    } 
+    }
     img, checksum, err := readImage(inputFile)
 
-    if *deduplicate && false && !checkChecksum(checksum) {
+    if *deduplicate && false && isDupe(checksum) {
         if *verbose {
             fmt.Println("Skipping", inputFile)
         }
@@ -307,6 +311,7 @@ func consumer() {
         processPath(inputFile)
 
         if (*shufflePaths && !*verbose) {
+            // XXX: BUG: Doesn't account for skipped, invalid files!
             progressBar.Increment()
         }
     }
@@ -333,5 +338,6 @@ func main() {
     receiveInputs()
 
     wg.Wait()
+    fmt.Printf("Dupes Skipped: %d\n", dupesSkipped)
     fmt.Println("Done")
 }
