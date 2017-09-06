@@ -307,11 +307,13 @@ func processPath(inputFile string) {
 
 func consumer() {
     defer wg.Done()
+    shouldDoProgress := *shufflePaths && !*verbose
+
     for inputFile := range filePaths {
         processPath(inputFile)
 
-        if (*shufflePaths && !*verbose) {
-            // XXX: BUG: Doesn't account for skipped, invalid files!
+
+        if shouldDoProgress {
             progressBar.Increment()
         }
     }
